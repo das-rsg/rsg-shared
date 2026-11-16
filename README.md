@@ -7,12 +7,13 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 | `rsg-shared/roles` | Rollen `Lehrkraft` / `Schueler`, `parseRoles`, `effectiveRole`, `ROLE_LABELS` |
 | `rsg-shared/auth` | `schoolProviders()`, `identityProviderId()`, `rolesFromSignIn()`, `stableUserKey()`, Dev-Login |
 | `rsg-shared/portal-link` | Leiste „← Weblehrerzimmer“ (`<PortalLink />`) |
+| `rsg-shared/portal-link.css` | nur das CSS der Leiste, für Apps ohne RSG-Design (in `theme.css` schon enthalten) |
 | `rsg-shared/theme.css` | RSG-Farben, Schriften, iPad-Grundregeln, Tailwind-4-Tokens |
 
 ## Einbinden
 
 ```bash
-npm install github:das-rsg/rsg-shared#v0.1.0
+npm install github:das-rsg/rsg-shared#v0.2.0
 ```
 
 `next.config.ts`:

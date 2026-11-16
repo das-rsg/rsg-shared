@@ -1,0 +1,19 @@
+/* Leiste „← Weblehrerzimmer“ (PortalLink). Funktioniert auch ohne theme.css. */
+.rsg-portal-link {
+  background: var(--topbar, #003a70); /* Fallback für Apps ohne RSG-Design */
+  padding-top: env(safe-area-inset-top);
+}
+.rsg-portal-link a {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  color: #fff;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.rsg-portal-link a:hover {
+  text-decoration: underline;
+}

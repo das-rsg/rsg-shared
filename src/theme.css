@@ -8,6 +8,9 @@
  * Schriften in app/layout.tsx selbst gehostet laden (@fontsource/lato, @fontsource/josefin-sans).
  */
 
+/* Leiste „← Weblehrerzimmer“ – auch einzeln einbindbar: @import "rsg-shared/portal-link.css"; */
+@import "./portal-link.css";
+
 :root {
   --rsg-blau-dunkel: #004c93;
   --rsg-blau-hell: #1a80c8;
@@ -99,24 +102,4 @@ input, select, textarea, button {
 }
 @utility safe-bottom {
   padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
-}
-
-/* Leiste „← Weblehrerzimmer“ (PortalLink) */
-.rsg-portal-link {
-  background: var(--topbar);
-  padding-top: env(safe-area-inset-top);
-}
-.rsg-portal-link a {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-height: 44px;
-  padding-left: max(1rem, env(safe-area-inset-left));
-  padding-right: max(1rem, env(safe-area-inset-right));
-  color: #fff;
-  font-size: 0.875rem;
-  text-decoration: none;
-}
-.rsg-portal-link a:hover {
-  text-decoration: underline;
 }

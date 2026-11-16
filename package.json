@@ -1,6 +1,6 @@
 {
   "name": "rsg-shared",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Gemeinsame Bausteine der RSG-Web-Apps: Design, Rollen, Login",
   "private": true,
   "type": "module",
@@ -9,9 +9,14 @@
     "./roles": "./src/roles.ts",
     "./auth": "./src/auth.ts",
     "./portal-link": "./src/PortalLink.tsx",
-    "./theme.css": "./src/theme.css"
+    "./theme.css": "./src/theme.css",
+    "./portal-link.css": "./src/portal-link.css"
   },
-  "files": ["src", "LICENSE", "README.md"],
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
