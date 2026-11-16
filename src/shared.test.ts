@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { devLoginEnabled, identityProviderId, providerKind, rolesFromSignIn, schoolProviders, stableUserKey } from "./auth";
+import { effectiveRole, parseRoles } from "./roles";
+
+describe("Rollen", () => {
+  it("liest nur bekannte Rollen aus dem Token", () => {
+    expect(parseRoles(["Lehrkraft", "Admin", "Lehrkraft"])).toEqual(["Lehrkraft"]);
+    expect(parseRoles("Schueler")).toEqual(["Schueler"]);
+    expect(parseRoles(undefined)).toEqual([]);
+    expect(parseRoles({ roles: ["Lehrkraft"] })).toEqual([]);
+  });
+
+  it("Lehrkräfte dürfen die Schüleransicht, Schüler:innen nie die Lehreransicht", () => {
+    expect(effectiveRole(["Lehrkraft"], true)).toBe("Schueler");
+    expect(effectiveRole(["Lehrkraft"], false)).toBe("Lehrkraft");
+    expect(effectiveRole(["Schueler"], false)).toBe("Schueler");
+    expect(effectiveRole([], false)).toBeNull();
+  });
+});
+
+describe("Login-Dienst wählen", () => {
+  it("Standard ist Entra ID", () => {
+    expect(providerKind({})).toBe("entra");
+    expect(identityProviderId({})).toBe("microsoft-entra-id");
+  });
+
+  it("Keycloak per AUTH_PROVIDER (Ausweichzweig ohne Microsoft)", () => {
+    expect(providerKind({ AUTH_PROVIDER: "Keycloak" })).toBe("keycloak");
+    expect(identityProviderId({ AUTH_PROVIDER: "keycloak" })).toBe("keycloak");
+  });
+
+  it("Tippfehler fallen sofort auf", () => {
+    expect(() => providerKind({ AUTH_PROVIDER: "logineo" })).toThrow(/unbekannt/);
+  });
+});
+
+describe("Dev-Login", () => {
+  it("nur lokal und nur mit DEV_LOGIN=true", () => {
+    expect(devLoginEnabled({ DEV_LOGIN: "true", NODE_ENV: "development" })).toBe(true);
+    expect(devLoginEnabled({ DEV_LOGIN: "true", NODE_ENV: "production" })).toBe(false);
+    expect(devLoginEnabled({ NODE_ENV: "development" })).toBe(false);
+  });
+
+  it("wird in Produktion nie als Provider angeboten", () => {
+    expect(schoolProviders({ DEV_LOGIN: "true", NODE_ENV: "production" })).toHaveLength(1);
+    expect(schoolProviders({ DEV_LOGIN: "true", NODE_ENV: "development" })).toHaveLength(2);
+  });
+});
+
+describe("rolesFromSignIn", () => {
+  const account = (provider: string) => ({ provider, type: "oidc", providerAccountId: "x" }) as never;
+
+  it("nimmt bei Entra/Keycloak den Claim roles aus dem Profil", () => {
+    expect(rolesFromSignIn({ account: account("microsoft-entra-id"), profile: { roles: ["Lehrkraft"] } })).toEqual(["Lehrkraft"]);
+    expect(rolesFromSignIn({ account: account("keycloak"), profile: { roles: ["Schueler", "offline_access"] } })).toEqual(["Schueler"]);
+  });
+
+  it("ohne Rolle im Profil gibt es keine Rolle – kein stilles Schüler:in-Fallback", () => {
+    expect(rolesFromSignIn({ account: account("microsoft-entra-id"), profile: {} })).toEqual([]);
+  });
+
+  it("nimmt beim Dev-Login die gewählte Rolle", () => {
+    expect(rolesFromSignIn({ account: account("dev"), user: { id: "1", roles: ["Schueler"] } as never })).toEqual(["Schueler"]);
+  });
+
+  it("ändert bei Token-Auffrischung nichts", () => {
+    expect(rolesFromSignIn({})).toBeUndefined();
+  });
+});
+
+describe("stableUserKey", () => {
+  it("nutzt die E-Mail, klein geschrieben", () => {
+    expect(stableUserKey({ email: " Max.Muster@DAS-RSG.de " })).toBe("max.muster@das-rsg.de");
+    expect(stableUserKey({ preferred_username: "Lena@das-rsg.de" })).toBe("lena@das-rsg.de");
+    expect(stableUserKey({})).toBeNull();
+  });
+});

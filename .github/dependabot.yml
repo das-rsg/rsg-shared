@@ -1,0 +1,24 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    ignore:
+      # Große Versionssprünge (z.B. TypeScript, ESLint, Next) bewusst von Hand,
+      # mit Blick in die Änderungshinweise – Sicherheitsupdates kommen trotzdem.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Kleine Updates gebündelt, damit nicht jede Woche zehn PRs kommen
+      kleinere-updates:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
