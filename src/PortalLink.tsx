@@ -4,7 +4,7 @@
  * Gestaltung über die Klasse .rsg-portal-link aus rsg-shared/theme.css.
  */
 export function PortalLink({ href }: { href?: string }) {
-  const target = href ?? process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:3000";
+  const target = href || process.env.NEXT_PUBLIC_PORTAL_URL || "http://localhost:3000";
   return (
     <nav className="rsg-portal-link" aria-label="Weblehrerzimmer">
       <a href={target}>

@@ -14,7 +14,7 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 ## Einbinden
 
 ```bash
-npm install github:das-rsg/rsg-shared#v0.3.0
+npm install github:das-rsg/rsg-shared#v0.3.1
 ```
 
 `next.config.ts`:
