@@ -5,6 +5,7 @@
  * AUTH_PROVIDER ("entra" = Standard, "keycloak" = Ausweichzweig ohne Microsoft).
  * Die Apps selbst bleiben dadurch unverändert, wenn die Schule umzieht.
  */
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Account, Profile, User } from "next-auth";
 import type { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
@@ -57,9 +58,80 @@ export function devLoginProvider(): Provider {
   });
 }
 
-/** Alle Provider einer App: Schul-Login, lokal zusätzlich der Dev-Login. */
+/** Ist der Schul-Login (Entra bzw. Keycloak) eingerichtet? Sonst zeigt die Login-Seite den Knopf nicht. */
+export function schoolLoginConfigured(env: Env = process.env): boolean {
+  return providerKind(env) === "keycloak" ? !!env.AUTH_KEYCLOAK_ID : !!env.AUTH_MICROSOFT_ENTRA_ID_ID;
+}
+
+/**
+ * Testlogin mit Benutzername und Passwort – für ein Testsystem ohne Microsoft-Login
+ * (auch in Produktion). Aktiv nur, wenn TEST_LOGIN_USER und TEST_LOGIN_PASSWORD_HASH gesetzt sind.
+ * Das Passwort steht nie im Klartext in der .env, sondern als Hash von hashPassword().
+ */
+export function testLoginEnabled(env: Env = process.env): boolean {
+  return !!env.TEST_LOGIN_USER?.trim() && !!env.TEST_LOGIN_PASSWORD_HASH?.startsWith("scrypt$");
+}
+
+/** Hash im Format scrypt$<salt>$<hash> (base64url), siehe README „Testsystem“. */
+export function hashPassword(password: string, salt: Buffer = randomBytes(16)): string {
+  return `scrypt$${salt.toString("base64url")}$${scryptSync(password, salt, 32).toString("base64url")}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [kind, salt, hash] = stored.split("$");
+  if (kind !== "scrypt" || !salt || !hash) return false;
+  const expected = Buffer.from(hash, "base64url");
+  if (expected.length === 0) return false;
+  const actual = scryptSync(password, Buffer.from(salt, "base64url"), expected.length);
+  return timingSafeEqual(actual, expected);
+}
+
+function sameText(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** Die Testperson aus der .env: immer Rolle Lehrkraft, Kennung TEST_LOGIN_EMAIL (Standard <user>@test.local). */
+export function testUser(env: Env = process.env) {
+  const user = (env.TEST_LOGIN_USER ?? "").trim().toLowerCase();
+  const email = (env.TEST_LOGIN_EMAIL?.trim() || `${user}@test.local`).toLowerCase();
+  const roles: Role[] = ["Lehrkraft"];
+  return { id: `test-${user}`, name: env.TEST_LOGIN_NAME?.trim() || "Testlehrkraft", email, roles };
+}
+
+/** Prüft Benutzername und Passwort gegen die .env; null bei falschen Angaben. */
+export function checkTestLogin(username: unknown, password: unknown, env: Env = process.env) {
+  if (!testLoginEnabled(env) || typeof username !== "string" || typeof password !== "string") return null;
+  const nameOk = sameText(username.trim().toLowerCase(), env.TEST_LOGIN_USER!.trim().toLowerCase());
+  const passwordOk = verifyPassword(password, env.TEST_LOGIN_PASSWORD_HASH!);
+  return nameOk && passwordOk ? testUser(env) : null;
+}
+
+/** Provider "test" für signIn("test", { username, password }). */
+export function testLoginProvider(env: Env = process.env): Provider {
+  return Credentials({
+    id: "test",
+    name: "Testzugang",
+    credentials: { username: { label: "Benutzername" }, password: { label: "Passwort", type: "password" } },
+    async authorize(credentials) {
+      return checkTestLogin(credentials?.username, credentials?.password, env);
+    },
+  });
+}
+
+/** Alle Provider einer App: Schul-Login, lokal zusätzlich der Dev-Login, im Testsystem der Testlogin. */
 export function schoolProviders(env: Env = process.env): Provider[] {
-  return devLoginEnabled(env) ? [identityProvider(env), devLoginProvider()] : [identityProvider(env)];
+  return [
+    identityProvider(env),
+    ...(devLoginEnabled(env) ? [devLoginProvider()] : []),
+    ...(testLoginEnabled(env) ? [testLoginProvider(env)] : []),
+  ];
+}
+
+/** Testsystem-Hinweis an? (TESTSYSTEM=true) */
+export function isTestSystem(env: Env = process.env): boolean {
+  return env.TESTSYSTEM === "true";
 }
 
 /**
@@ -75,7 +147,7 @@ export function rolesFromSignIn({
   profile?: Profile;
   user?: User | (User & { roles?: unknown });
 }): Role[] | undefined {
-  if (account && account.provider !== "dev" && profile) return parseRoles(profile.roles);
+  if (account && account.provider !== "dev" && account.provider !== "test" && profile) return parseRoles(profile.roles);
   if (user && "roles" in user) return parseRoles(user.roles);
   return undefined;
 }

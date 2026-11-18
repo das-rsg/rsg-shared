@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { devLoginEnabled, identityProviderId, providerKind, rolesFromSignIn, schoolProviders, stableUserKey } from "./auth";
+import {
+  checkTestLogin,
+  devLoginEnabled,
+  hashPassword,
+  identityProviderId,
+  providerKind,
+  rolesFromSignIn,
+  schoolLoginConfigured,
+  schoolProviders,
+  stableUserKey,
+  testLoginEnabled,
+  verifyPassword,
+} from "./auth";
 import { effectiveRole, parseRoles } from "./roles";
 
 describe("Rollen", () => {
@@ -73,5 +85,44 @@ describe("stableUserKey", () => {
     expect(stableUserKey({ email: " Max.Muster@DAS-RSG.de " })).toBe("max.muster@das-rsg.de");
     expect(stableUserKey({ preferred_username: "Lena@das-rsg.de" })).toBe("lena@das-rsg.de");
     expect(stableUserKey({})).toBeNull();
+  });
+});
+
+describe("Testlogin", () => {
+  const env = { TEST_LOGIN_USER: "Test", TEST_LOGIN_PASSWORD_HASH: hashPassword("geheim-123"), NODE_ENV: "production" };
+
+  it("ist nur mit Benutzer und Hash aktiv – auch in Produktion", () => {
+    expect(testLoginEnabled({})).toBe(false);
+    expect(testLoginEnabled({ TEST_LOGIN_USER: "test", TEST_LOGIN_PASSWORD_HASH: "geheim" })).toBe(false);
+    expect(testLoginEnabled(env)).toBe(true);
+    expect(schoolProviders(env)).toHaveLength(2);
+  });
+
+  it("prüft Benutzername (ohne Groß/klein) und Passwort", () => {
+    expect(checkTestLogin("test", "geheim-123", env)).toMatchObject({ email: "test@test.local", roles: ["Lehrkraft"] });
+    expect(checkTestLogin(" TEST ", "geheim-123", env)).not.toBeNull();
+    expect(checkTestLogin("test", "geheim-12", env)).toBeNull();
+    expect(checkTestLogin("andere", "geheim-123", env)).toBeNull();
+    expect(checkTestLogin("test", undefined, env)).toBeNull();
+  });
+
+  it("speichert das Passwort nur als Hash mit Salz", () => {
+    const a = hashPassword("x");
+    expect(a).toMatch(/^scrypt\$/);
+    expect(a).not.toBe(hashPassword("x"));
+    expect(verifyPassword("x", a)).toBe(true);
+    expect(verifyPassword("y", a)).toBe(false);
+    expect(verifyPassword("x", "kaputt")).toBe(false);
+  });
+
+  it("übernimmt die Rolle Lehrkraft aus dem Testnutzer", () => {
+    const account = { provider: "test", type: "credentials", providerAccountId: "x" } as never;
+    expect(rolesFromSignIn({ account, profile: {} as never, user: { id: "1", roles: ["Lehrkraft"] } as never })).toEqual(["Lehrkraft"]);
+  });
+
+  it("Schul-Login-Knopf nur, wenn eingerichtet", () => {
+    expect(schoolLoginConfigured({})).toBe(false);
+    expect(schoolLoginConfigured({ AUTH_MICROSOFT_ENTRA_ID_ID: "x" })).toBe(true);
+    expect(schoolLoginConfigured({ AUTH_PROVIDER: "keycloak", AUTH_KEYCLOAK_ID: "x" })).toBe(true);
   });
 });

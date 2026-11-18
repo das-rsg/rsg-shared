@@ -17,3 +17,19 @@
 .rsg-portal-link a:hover {
   text-decoration: underline;
 }
+
+/* Hinweisleiste „Testsystem“ (TestBanner) */
+.rsg-test-banner {
+  margin: 0;
+  padding: 0.35rem max(1rem, env(safe-area-inset-right)) 0.35rem max(1rem, env(safe-area-inset-left));
+  background: #fde68a;
+  color: #451a03;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+}
+@media print {
+  .rsg-test-banner {
+    display: none;
+  }
+}
