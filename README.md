@@ -5,7 +5,8 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 | Import | Inhalt |
 |---|---|
 | `rsg-shared/roles` | Rollen `Lehrkraft` / `Schueler`, `parseRoles`, `effectiveRole`, `ROLE_LABELS` |
-| `rsg-shared/auth` | `schoolProviders()`, `identityProviderId()`, `rolesFromSignIn()`, `stableUserKey()`, Dev-Login |
+| `rsg-shared/auth` | `schoolProviders()`, `identityProviderId()`, `rolesFromSignIn()`, `personFromSignIn()`, `stableUserKey()`, Dev- und Testlogin |
+| `rsg-shared/login-redirect` | `loginRedirect()` und `safeCallbackPath()`: Login-Umleitung unter einem Unterpfad mit sicherem Rücksprung |
 | `rsg-shared/portal-link` | Leiste „← Weblehrerzimmer“ (`<PortalLink />`) |
 | `rsg-shared/test-banner` | Hinweis „Testsystem“ (`<TestBanner />`, nur mit `TESTSYSTEM=true`) |
 | `rsg-shared/portal-link.css` | nur das CSS der Leiste, für Apps ohne RSG-Design (in `theme.css` schon enthalten) |
@@ -87,6 +88,28 @@ Für ein Testsystem ohne Microsoft-Login (z.B. `webapps.das-rsg.de`) gibt es ein
 | `TEST_LOGIN_EMAIL` | Kennung für die Daten (Standard `<user>@test.local`) |
 | `TESTSYSTEM=true` | zeigt `<TestBanner />` („nur Fantasiedaten“) |
 
-Die Testperson hat immer die Rolle `Lehrkraft`. Die Login-Seite ruft `signIn("test", { username, password })` auf; `schoolLoginConfigured()` sagt, ob der Knopf „Mit Schulkonto anmelden“ angezeigt werden soll.
+Diese Testperson hat immer die Rolle `Lehrkraft`.
+
+**Weitere Testkonten** (ab v0.4.0), z.B. Schüler:innen, stehen in `TEST_LOGIN_ACCOUNTS`: Konten getrennt durch `;`, Felder durch `|`:
+
+```
+TEST_LOGIN_ACCOUNTS='schueler1|Schueler|scrypt$…$…|Mia|Muster|7b;schueler2|Schueler|scrypt$…$…|Ben|Beispiel|7b'
+```
+
+Felder: Benutzername, Rolle (`Lehrkraft` | `Schueler`), Passwort-Hash, optional Vorname, Nachname, Klasse. Die E-Mail ist `<benutzername>@test.local`. Ungültige Einträge werden ignoriert. In Compose die ganze Zeile in einfache Anführungszeichen setzen (wegen `$`). Unbekannte Benutzernamen kosten dieselbe Rechenzeit wie bekannte.
+
+**Vor- und Nachname, Klasse** (ab v0.4.0): `personFromSignIn({ account, profile, user })` im jwt-Callback liefert `givenName`, `familyName` und – beim Testlogin – `classCode`. Beim Schul-Login stammen die Namen aus den OIDC-Claims `given_name`/`family_name`; eine Klasse liefert er noch nicht. Die App legt die Werte selbst ins Token und in die Session.
+
+**Login-Umleitung unter Unterpfad** (ab v0.4.0): Auth.js verliert im `authorized`-Callback den basePath (`/lehrerheft/raeume` → `/login`). Abhilfe:
+
+```ts
+import { loginRedirect, safeCallbackPath } from "rsg-shared/login-redirect";
+// auth.ts
+authorized({ auth, request }) { return auth?.user ? true : loginRedirect(request.nextUrl, BASE_PATH); }
+// Login-Seite: Rücksprung nur geprüft übernehmen (BASE_PATH abziehen, wenn redirect() ihn selbst setzt)
+const target = safeCallbackPath(searchParams.callbackUrl, BASE_PATH);
+```
+
+Die Login-Seite ruft `signIn("test", { username, password })` auf; `schoolLoginConfigured()` sagt, ob der Knopf „Mit Schulkonto anmelden“ angezeigt werden soll.
 
 **Mehrere Apps unter einer Domain** (Unterpfade): Alle Apps nutzen dasselbe `AUTH_SECRET`, dann gilt eine Anmeldung für alle. Die Tokens müssen dafür verträglich sein (Rollen in `token.roles`, E-Mail in `token.email`).

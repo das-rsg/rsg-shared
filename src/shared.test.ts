@@ -4,7 +4,9 @@ import {
   devLoginEnabled,
   hashPassword,
   identityProviderId,
+  personFromSignIn,
   providerKind,
+  testAccounts,
   rolesFromSignIn,
   schoolLoginConfigured,
   schoolProviders,
@@ -12,7 +14,94 @@ import {
   testLoginEnabled,
   verifyPassword,
 } from "./auth";
+import { loginRedirect, safeCallbackPath } from "./login-redirect";
 import { effectiveRole, parseRoles } from "./roles";
+
+describe("Mehrere Testkonten (TEST_LOGIN_ACCOUNTS)", () => {
+  const h1 = hashPassword("geheim1", Buffer.alloc(16, 1));
+  const h2 = hashPassword("geheim2", Buffer.alloc(16, 2));
+  const env = {
+    TEST_LOGIN_USER: "test",
+    TEST_LOGIN_PASSWORD_HASH: h1,
+    TEST_LOGIN_ACCOUNTS: `schueler1|Schueler|${h2}|Mia|Muster|7b; kaputt|Admin|${h2}; ohnehash|Schueler|nix; Test|Schueler|${h2}`,
+  };
+
+  it("liest das bisherige Konto und gültige weitere Konten, ignoriert ungültige und doppelte", () => {
+    expect(testAccounts(env).map((a) => `${a.username}:${a.role}`)).toEqual(["test:Lehrkraft", "schueler1:Schueler"]);
+  });
+
+  it("meldet Schüler:in mit Rolle, Namen, Klasse und Test-E-Mail an", () => {
+    expect(checkTestLogin(" Schueler1 ", "geheim2", env)).toEqual({
+      id: "test-schueler1",
+      name: "Mia Muster",
+      email: "schueler1@test.local",
+      roles: ["Schueler"],
+      givenName: "Mia",
+      familyName: "Muster",
+      classCode: "7b",
+    });
+  });
+
+  it("lehnt falsches Passwort, fremdes Passwort und unbekannte Benutzer ab", () => {
+    expect(checkTestLogin("schueler1", "geheim1", env)).toBeNull();
+    expect(checkTestLogin("test", "geheim2", env)).toBeNull();
+    expect(checkTestLogin("niemand", "geheim2", env)).toBeNull();
+  });
+
+  it("aktiviert den Testlogin auch nur mit TEST_LOGIN_ACCOUNTS", () => {
+    expect(testLoginEnabled({ TEST_LOGIN_ACCOUNTS: `s|Schueler|${h2}` })).toBe(true);
+    expect(testLoginEnabled({ TEST_LOGIN_ACCOUNTS: "s|Schueler|" })).toBe(false);
+  });
+});
+
+describe("personFromSignIn", () => {
+  it("liest given_name/family_name aus dem Schul-Login", () => {
+    expect(
+      personFromSignIn({ account: { provider: "microsoft-entra-id" } as never, profile: { given_name: " Lena ", family_name: "Müller-Schmidt" } }),
+    ).toEqual({ givenName: "Lena", familyName: "Müller-Schmidt" });
+  });
+  it("übernimmt beim Testlogin Namen und Klasse aus dem Konto", () => {
+    expect(
+      personFromSignIn({ account: { provider: "test" } as never, user: { givenName: "Mia", familyName: "Muster", classCode: "7b" } as never }),
+    ).toEqual({ givenName: "Mia", familyName: "Muster", classCode: "7b" });
+  });
+  it("gibt ohne Anmeldevorgang undefined zurück", () => {
+    expect(personFromSignIn({ account: null })).toBeUndefined();
+  });
+});
+
+describe("Login-Weiterleitung unter Unterpfad", () => {
+  it("lässt nur Pfade innerhalb des Unterpfads zu", () => {
+    expect(safeCallbackPath("/anwesenheit/bestaetigen/abc?x=1", "/anwesenheit")).toBe("/anwesenheit/bestaetigen/abc?x=1");
+    for (const bad of [
+      "https://evil.example/anwesenheit/",
+      "//evil.example/anwesenheit",
+      "/anwesenheit/../lehrerheft/raeume",
+      "/lehrerheft/raeume",
+      "/anwesenheit\\..\\x",
+      "javascript:alert(1)",
+      "/anwesenheit/login",
+      "/anwesenheit/api/auth/signout",
+      "/anwesenheitX/",
+    ]) {
+      expect(safeCallbackPath(bad, "/anwesenheit"), bad).toBe("/anwesenheit/");
+    }
+  });
+
+  it("ohne Unterpfad (Portal) bleibt der Schutz vor fremden Origins", () => {
+    expect(safeCallbackPath("/lehrerheft/raeume", "")).toBe("/lehrerheft/raeume");
+    expect(safeCallbackPath("//evil.example", "")).toBe("/");
+    expect(safeCallbackPath("/login", "")).toBe("/");
+  });
+
+  it("leitet auf die Login-Seite der App um und behält den Rücksprung", () => {
+    const res = loginRedirect(new URL("https://webapps.das-rsg.de/lehrerheft/raeume?id=3"), "/lehrerheft");
+    expect(res.status).toBe(307);
+    const to = new URL(res.headers.get("location")!);
+    expect(to.origin + to.pathname).toBe("https://webapps.das-rsg.de/lehrerheft/login");
+    expect(to.searchParams.get("callbackUrl")).toBe("/lehrerheft/raeume?id=3");
+  });
+});
 
 describe("Rollen", () => {
   it("liest nur bekannte Rollen aus dem Token", () => {
