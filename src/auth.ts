@@ -85,9 +85,11 @@ export type TestAccount = {
 export function testAccounts(env: Env = process.env): TestAccount[] {
   const out: TestAccount[] = [];
   const seen = new Set<string>();
+  // Benutzername UND E-Mail müssen eindeutig sein: die E-Mail ist in allen Apps der Datenschlüssel
   const add = (a: TestAccount) => {
-    if (!a.username || seen.has(a.username) || !a.hash.startsWith("scrypt$")) return;
-    seen.add(a.username);
+    if (!a.username || seen.has(`u:${a.username}`) || seen.has(`e:${a.email}`) || !a.hash.startsWith("scrypt$")) return;
+    seen.add(`u:${a.username}`);
+    seen.add(`e:${a.email}`);
     out.push(a);
   };
   const legacy = (env.TEST_LOGIN_USER ?? "").trim().toLowerCase();

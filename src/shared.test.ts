@@ -48,6 +48,12 @@ describe("Mehrere Testkonten (TEST_LOGIN_ACCOUNTS)", () => {
     expect(checkTestLogin("niemand", "geheim2", env)).toBeNull();
   });
 
+  it("verwirft ein Zusatzkonto mit derselben E-Mail wie das bisherige Konto", () => {
+    const clash = { ...env, TEST_LOGIN_EMAIL: "lehrer@test.local", TEST_LOGIN_ACCOUNTS: `lehrer|Schueler|${h2}` };
+    expect(testAccounts(clash).map((a) => a.email)).toEqual(["lehrer@test.local"]);
+    expect(checkTestLogin("lehrer", "geheim2", clash)).toBeNull();
+  });
+
   it("aktiviert den Testlogin auch nur mit TEST_LOGIN_ACCOUNTS", () => {
     expect(testLoginEnabled({ TEST_LOGIN_ACCOUNTS: `s|Schueler|${h2}` })).toBe(true);
     expect(testLoginEnabled({ TEST_LOGIN_ACCOUNTS: "s|Schueler|" })).toBe(false);
@@ -95,11 +101,16 @@ describe("Login-Weiterleitung unter Unterpfad", () => {
   });
 
   it("leitet auf die Login-Seite der App um und behält den Rücksprung", () => {
-    const res = loginRedirect(new URL("https://webapps.das-rsg.de/lehrerheft/raeume?id=3"), "/lehrerheft");
+    const env = { AUTH_URL: "https://webapps.das-rsg.de/lehrerheft/api/auth" };
+    const res = loginRedirect(new URL("http://intern-host:3000/lehrerheft/raeume?id=3"), "/lehrerheft", "/login", env);
     expect(res.status).toBe(307);
     const to = new URL(res.headers.get("location")!);
+    // Origin aus AUTH_URL, nicht aus der Anfrage
     expect(to.origin + to.pathname).toBe("https://webapps.das-rsg.de/lehrerheft/login");
     expect(to.searchParams.get("callbackUrl")).toBe("/lehrerheft/raeume?id=3");
+    // ohne AUTH_URL (lokal): Origin der Anfrage
+    const local = new URL(loginRedirect(new URL("http://localhost:3004/lehrerheft/x"), "/lehrerheft", "/login", {}).headers.get("location")!);
+    expect(local.origin).toBe("http://localhost:3004");
   });
 });
 
