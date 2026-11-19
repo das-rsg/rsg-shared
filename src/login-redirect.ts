@@ -39,11 +39,25 @@ export function safeCallbackPath(raw: unknown, basePath: string): string {
 /**
  * Antwort für den authorized-Callback: 307 auf `${basePath}${loginPath}?callbackUrl=<Pfad>`.
  * nextUrl.href enthält in Next.js den basePath; als Rücksprung geht nur Pfad + Query mit, nie die Origin.
+ * Next.js verlangt im Proxy eine absolute Location. Die Origin kommt deshalb aus AUTH_URL (fest konfiguriert),
+ * nicht aus der Anfrage: kein interner Host und kein manipulierter Host-Header gelangt hinein.
+ * Nur ohne AUTH_URL (lokale Entwicklung) wird die Origin der Anfrage genommen.
  */
-export function loginRedirect(nextUrl: URL, basePath: string, loginPath = "/login"): Response {
+export function loginRedirect(
+  nextUrl: URL,
+  basePath: string,
+  loginPath = "/login",
+  env: Record<string, string | undefined> = process.env,
+): Response {
   const base = basePath.replace(/\/+$/, "");
   const here = new URL(nextUrl.href);
-  const login = new URL(`${base}${loginPath}`, here.origin);
+  let origin = here.origin;
+  try {
+    if (env.AUTH_URL) origin = new URL(env.AUTH_URL).origin;
+  } catch {
+    // ungültige AUTH_URL: Origin der Anfrage
+  }
+  const login = new URL(`${base}${loginPath}`, origin);
   login.searchParams.set("callbackUrl", safeCallbackPath(here.pathname + here.search, base));
   return Response.redirect(login, 307);
 }

@@ -1,6 +1,6 @@
 {
   "name": "rsg-shared",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Gemeinsame Bausteine der RSG-Web-Apps: Design, Rollen, Login",
   "private": true,
   "type": "module",
