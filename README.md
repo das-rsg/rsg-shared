@@ -7,6 +7,7 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 | `rsg-shared/roles` | Rollen `Lehrkraft` / `Schueler`, `parseRoles`, `effectiveRole`, `ROLE_LABELS` |
 | `rsg-shared/auth` | `schoolProviders()`, `identityProviderId()`, `rolesFromSignIn()`, `personFromSignIn()`, `stableUserKey()`, Dev- und Testlogin |
 | `rsg-shared/login-redirect` | `loginRedirect()` und `safeCallbackPath()`: Login-Umleitung unter einem Unterpfad mit sicherem Rücksprung |
+| `rsg-shared/csp` | `withCsp()`: Nonce-Content-Security-Policy für den Proxy, Modus per `CSP_MODE` |
 | `rsg-shared/portal-link` | Leiste „← Weblehrerzimmer“ (`<PortalLink />`) |
 | `rsg-shared/test-banner` | Hinweis „Testsystem“ (`<TestBanner />`, nur mit `TESTSYSTEM=true`) |
 | `rsg-shared/portal-link.css` | nur das CSS der Leiste, für Apps ohne RSG-Design (in `theme.css` schon enthalten) |
@@ -15,7 +16,7 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 ## Einbinden
 
 ```bash
-npm install github:das-rsg/rsg-shared#v0.3.1
+npm install github:das-rsg/rsg-shared#v0.5.0
 ```
 
 `next.config.ts`:
@@ -53,6 +54,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 ```
 
 Die Login-Seite ruft `signIn(identityProviderId())` auf.
+
+## Content-Security-Policy (ab v0.5.0)
+
+Alle Apps teilen sich die Origin `webapps.das-rsg.de`. Eine XSS-Lücke in einer App reicht deshalb bis an das gemeinsame Session-Cookie. Deshalb bekommt jede Next-App dieselbe Nonce-CSP.
+
+`proxy.ts` (statt `export { auth as proxy } from "@/auth"`):
+```ts
+import { withCsp } from "rsg-shared/csp";
+import { auth } from "@/auth";
+
+export const proxy = withCsp(auth, { publicPaths: ["/login"] });
+export const config = {
+  // Login NICHT mehr ausnehmen (sonst fehlt dort die CSP). Prefetches nicht ausnehmen (sonst ohne Login-Schutz).
+  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest).*)"],
+};
+```
+
+`app/layout.tsx`: `await connection()` (aus `next/server`) im Root-Layout. Nur dynamisch gerenderte Seiten bekommen die Nonce. Statische Seiten (z.B. `/_not-found`) hätten sonst blockierte Skripte. Im Build-Log muss jede Seite `ƒ` sein.
+
+| `CSP_MODE` | Wirkung |
+|---|---|
+| `report` (Standard) | `Content-Security-Policy-Report-Only`: blockiert nichts, Verstöße erscheinen in der Browser-Konsole |
+| `enforce` | `Content-Security-Policy`: Verstöße werden blockiert |
+| `off` | kein Header |
+
+- **Policy:**
+  - `script-src 'self' 'nonce-…' 'strict-dynamic'` (nur in der Entwicklung zusätzlich `'unsafe-eval'`)
+  - `style-src 'self' 'unsafe-inline'`
+  - `form-action 'self' https://login.microsoftonline.com`
+  - `frame-ancestors 'none'`
+  - `object-src 'none'`
+  - Rest `'self'`
+
+  Optionen: `formAction` (z.B. Keycloak-Host), `connectSrc`, `frameSelf`, `publicPaths` (exakt oder `"/scan/*"`).
+- **Warum ein Wrapper:** `withCsp` umschließt den fertigen Auth-Proxy und ändert dessen Entscheidung nicht. Bitte nicht `auth((req) => …)` mit eigener Funktion verwenden: Auth.js ruft die Funktion auch dann auf, wenn `authorized` `false` liefert.
+- **e2e:** Mit `CSP_MODE=enforce` laufen lassen und Konsolenmeldungen „Refused to …“ bzw. `securitypolicyviolation` als Fehler werten (Vorlage: `e2e/csp.ts` im Portal).
 
 ## Login-Dienst wechseln
 
