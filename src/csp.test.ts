@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createNonce, cspHeader, cspMode, isPublicPath, withCsp } from "./csp";
 
 const req = (url: string, basePath = "", headers: Record<string, string> = {}) => {
@@ -47,11 +47,16 @@ describe("cspHeader", () => {
 });
 
 describe("cspMode", () => {
-  it("Standard ist report, Tippfehler fallen auf", () => {
+  it("Standard ist report, Tippfehler fallen mit einer Warnung (einmal) auf report zurück", () => {
     expect(cspMode({})).toBe("report");
     expect(cspMode({ CSP_MODE: "Enforce" })).toBe("enforce");
     expect(cspMode({ CSP_MODE: "off" })).toBe("off");
-    expect(() => cspMode({ CSP_MODE: "scharf" })).toThrow(/unbekannt/);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(cspMode({ CSP_MODE: "scharf" })).toBe("report");
+    expect(cspMode({ CSP_MODE: "scharf" })).toBe("report");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/unbekannt/);
+    warn.mockRestore();
   });
 });
 

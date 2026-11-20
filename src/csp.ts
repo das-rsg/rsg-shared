@@ -26,10 +26,20 @@ type Env = Record<string, string | undefined>;
 
 export type CspMode = "report" | "enforce" | "off";
 
+const warned = new Set<string>();
+
+/**
+ * Modus aus CSP_MODE. Unbekannte Werte (Tippfehler in der .env) fallen mit einer Warnung im Log auf report zurück –
+ * sonst legte ein Tippfehler alle Apps lahm. Die CSP ist eine zusätzliche Schutzschicht, report schadet nicht.
+ */
 export function cspMode(env: Env = process.env): CspMode {
   const v = (env.CSP_MODE ?? "report").trim().toLowerCase();
   if (v === "report" || v === "enforce" || v === "off") return v;
-  throw new Error(`CSP_MODE="${env.CSP_MODE}" ist unbekannt (erlaubt: report, enforce, off)`);
+  if (!warned.has(v)) {
+    warned.add(v);
+    console.warn(`[rsg-shared/csp] CSP_MODE="${env.CSP_MODE}" ist unbekannt (erlaubt: report, enforce, off) – verwende report`);
+  }
+  return "report";
 }
 
 export type CspOptions = {

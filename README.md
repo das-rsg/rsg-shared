@@ -16,7 +16,7 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 ## Einbinden
 
 ```bash
-npm install github:das-rsg/rsg-shared#v0.5.0
+npm install github:das-rsg/rsg-shared#v0.5.1
 ```
 
 `next.config.ts`:
@@ -66,8 +66,10 @@ import { auth } from "@/auth";
 
 export const proxy = withCsp(auth, { publicPaths: ["/login"] });
 export const config = {
+  // "/" extra: Unter einem Unterpfad (basePath) trifft das zweite Muster die nackte Startseite
+  // (/anwesenheit ohne Schrägstrich) nicht – sie bliebe sonst ohne CSP und ohne Proxy.
   // Login NICHT mehr ausnehmen (sonst fehlt dort die CSP). Prefetches nicht ausnehmen (sonst ohne Login-Schutz).
-  matcher: ["/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest).*)"],
+  matcher: ["/", "/((?!api/auth|_next/static|_next/image|favicon.ico|manifest.webmanifest).*)"],
 };
 ```
 
@@ -89,7 +91,19 @@ export const config = {
 
   Optionen: `formAction` (z.B. Keycloak-Host), `connectSrc`, `frameSelf`, `publicPaths` (exakt oder `"/scan/*"`).
 - **Warum ein Wrapper:** `withCsp` umschließt den fertigen Auth-Proxy und ändert dessen Entscheidung nicht. Bitte nicht `auth((req) => …)` mit eigener Funktion verwenden: Auth.js ruft die Funktion auch dann auf, wenn `authorized` `false` liefert.
-- **e2e:** Mit `CSP_MODE=enforce` laufen lassen und Konsolenmeldungen „Refused to …“ bzw. `securitypolicyviolation` als Fehler werten (Vorlage: `e2e/csp.ts` im Portal).
+- **e2e:** Mit `CSP_MODE=enforce` laufen lassen und Konsolenmeldungen „Refused to …“ bzw. `securitypolicyviolation` als Fehler werten (Vorlage: `e2e/csp.ts` im Portal, mit `watchCsp(page)` für weitere Browser-Kontexte).
+- **Prüfung gegen den Produktions-Build (Pflicht in der CI, ab v0.5.1):** Die e2e laufen unter `next dev`. Dort erlaubt die Policy `'unsafe-eval'`, deshalb fällt eval im Client-Bundle nur in Produktion auf (Beispiel: zod v4 prüft per `Function("")`, ob JIT geht – zod nicht in Client-Komponenten importieren, auch nicht für Konstanten). Nach `next build`:
+  ```yaml
+  - name: CSP-Prüfung gegen den Prod-Build
+    run: |
+      npx rsg-csp-check --dir .next
+      CSP_MODE=enforce npx next start -p 3900 &
+      npx rsg-csp-check --url http://localhost:3900 --paths /,/login --wait 60
+  ```
+  Die Prüfung schlägt fehl bei eval / `new Function` / `Function("")` in Client-Chunks, bei einem fehlenden CSP-Header und bei einem `<script>` ohne die Nonce aus dem Header. Weitere Seiten über `--paths`, `--expect report|any` für den Beobachtungsmodus.
+- **Nach jedem Next.js-Update:** e2e mit `enforce` und `rsg-csp-check` sind Pflicht. `withCsp` reicht die Nonce über die internen Next-Header `x-middleware-next`, `x-middleware-override-headers` und `x-middleware-request-*` weiter. Ändert Next die, fehlt die Nonce stillschweigend, und unter `enforce` bricht die Seite (fail-closed: keine Lücke, aber kaputt).
+- **Unbekannter `CSP_MODE`** (Tippfehler) fällt mit einer Warnung im Log auf `report` zurück.
+- **Safari/iPad:** Report-Only ohne `report-to` wertet WebKit nicht aus, Verstöße erscheinen dort nicht in der Konsole. Den Beobachtungsmodus deshalb in Chrome mit offenen DevTools prüfen. Einen öffentlichen Report-Endpunkt gibt es bewusst nicht (unauthentifiziert, Log-Flut).
 
 ## Login-Dienst wechseln
 
