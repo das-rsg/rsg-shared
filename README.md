@@ -6,6 +6,7 @@ Gemeinsame Bausteine der Web-Apps des Rhein-Sieg-Gymnasiums: Design, Rollen und 
 |---|---|
 | `rsg-shared/roles` | Rollen `Lehrkraft` / `Schueler`, `parseRoles`, `effectiveRole`, `ROLE_LABELS` |
 | `rsg-shared/auth` | `schoolProviders()`, `identityProviderId()`, `rolesFromSignIn()`, `personFromSignIn()`, `stableUserKey()`, Dev- und Testlogin |
+| `rsg-shared/auth-path` | `authBasePath()` und `authRouteHandlers()`: Schul-Login (OAuth) für Apps unter einem Unterpfad |
 | `rsg-shared/login-redirect` | `loginRedirect()` und `safeCallbackPath()`: Login-Umleitung unter einem Unterpfad mit sicherem Rücksprung |
 | `rsg-shared/csp` | `withCsp()`: Nonce-Content-Security-Policy für den Proxy, Modus per `CSP_MODE` |
 | `rsg-shared/portal-link` | Leiste „← Weblehrerzimmer“ (`<PortalLink />`) |
@@ -160,6 +161,21 @@ authorized({ auth, request }) { return auth?.user ? true : loginRedirect(request
 // Login-Seite: Rücksprung nur geprüft übernehmen (BASE_PATH abziehen, wenn redirect() ihn selbst setzt)
 const target = safeCallbackPath(searchParams.callbackUrl, BASE_PATH);
 ```
+
+**Schul-Login unter Unterpfad** (ab v0.5.2, **Pflicht für jede App unter einem Unterpfad**): Next.js reicht Anfragen ohne basePath an den Route-Handler weiter. Mit festem `basePath: "/api/auth"` baut Auth.js die Rücksprungadresse für Microsoft dann ohne App-Präfix (`/api/auth/callback/…` statt `/lehrerheft/api/auth/callback/…`) – der Callback landet beim Portal, die signIn-/jwt-Callbacks der App laufen nicht. Der Testlogin ist nicht betroffen, deshalb fällt das erst mit Entra auf. Abhilfe:
+
+```ts
+// auth.ts
+import { authBasePath } from "rsg-shared/auth-path";
+NextAuth({ basePath: authBasePath(), … })   // Pfad aus AUTH_URL, z.B. /lehrerheft/api/auth
+
+// app/api/auth/[...nextauth]/route.ts
+import { authRouteHandlers } from "rsg-shared/auth-path";
+import { handlers } from "@/auth";
+export const { GET, POST } = authRouteHandlers(handlers);   // setzt den Präfix wieder vor
+```
+
+Prüfen: `curl https://<domain>/<app>/api/auth/providers` – `callbackUrl` muss den App-Pfad enthalten. Ohne Unterpfad (Portal, lokal ohne `AUTH_URL`) ändert sich nichts.
 
 Die Login-Seite ruft `signIn("test", { username, password })` auf; `schoolLoginConfigured()` sagt, ob der Knopf „Mit Schulkonto anmelden“ angezeigt werden soll.
 
